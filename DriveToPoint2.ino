@@ -5,16 +5,17 @@
 Zumo32U4OLED display;       // OLED display for feedback
 Zumo32U4Buzzer buzzer;      // Buzzer for sound feedback
 Zumo32U4ButtonA buttonA;    // Button A for user input
+Zumo32U4ButtonC buttonC;    // Button C for user input
 Zumo32U4Motors motors;      // Motor control
 Zumo32U4Encoders encoders;  // Encoders for distance measurement (approx. 69.79 counts per cm)
 Zumo32U4IMU imu;            // Inertial Measurement Unit for gyro readings
 
-#define ENCODER_COUNTS_PER_CM 70;
+#define ENCODER_COUNTS_PER_CM 78;
 
 // Define the number of points and coordinates arrays
 const int numPoints = 16;
-int16_t xCoords[numPoints] = { 1, 27, 32, 41, 51, 34, 22, 19, 45, 56, 72, 89, 76, 68, 12, 100 };
-int16_t yCoords[numPoints] = { 1, 13, 15, 23, 42, 50, 57, 63, 84, 89, 96, 74, 29, 8, 30, 0 };
+int16_t xCoords[numPoints] = { 0, 27, 32, 41, 51, 34, 22, 19, 45, 56, 72, 89, 76, 68, 12, 100 };
+int16_t yCoords[numPoints] = { 0, 13, 15, 23, 42, 50, 57, 63, 84, 89, 96, 74, 29, 8, 30, 0 };
 
 float gyroOffsetZ;       // Offset for gyro calibration
 float currentAngle = 0;  // Initialize current angle
@@ -41,21 +42,23 @@ void setup() {
 
   if (!imu.init()) {
     display.print("IMU Init Failed");
-    while (1)
-      ;  // stop the program if initialization fails
+    while (1);  // stop the program if initialization fails
   }
 }
 
 void loop() {
   // Nothing to do here
-  generateCoordinates(xCoords, yCoords, numPoints, 0.1);
+  generateCoordinates(xCoords, yCoords, numPoints, 1); 
   shortDistensen();
 
   gyroCalibrate();  // Calibrate the gyro
 
   lastTime = micros();  // Initialize last time
   moveToPositions();    // Start moving to positions
+  turnToAngle(90 - currentAngle);
   display.print("done");
+  display.print("press A");
+  buttonA.waitForButton();
   delay(5000);
 }
 
@@ -101,20 +104,7 @@ void shortDistensen() {
 
     for (int j = i + 1; j < numPoints; j++) {
       float currentDistance = calculateDistance(xCoords, yCoords, i, j);
-      Serial.print(xCoords[i]);
-      Serial.print(", ");
-      Serial.print(yCoords[i]);
-      Serial.print(" to ");
-      Serial.print(xCoords[j]);
-      Serial.print(", ");
-      Serial.print(yCoords[j]);
-      Serial.print(" = ");
-      Serial.println(calculateDistance(xCoords, yCoords, i, j));
       if (currentDistance < shortestDistance) {
-        Serial.print("new points: ");
-        Serial.print(shortestDistance);
-        Serial.print(" > ");
-        Serial.println(currentDistance);
         shortestDistance = currentDistance;
         closestPointIndex = j;
       }
@@ -124,8 +114,6 @@ void shortDistensen() {
     if (closestPointIndex != i + 1) {
       swapElements(yCoords, i + 1, closestPointIndex);
       swapElements(xCoords, i + 1, closestPointIndex);
-      printarray(xCoords, numPoints);
-      printarray(yCoords, numPoints);
     }
 
   }
@@ -281,20 +269,29 @@ int32_t getTurnAngleInDegrees() {
 
 
 void driveDistance(float distance) {
-  int speed = 200;
+  int speed = 100;
   int counts = distance * ENCODER_COUNTS_PER_CM;  // Convert cm to encoder counts (adjust based on your measurements)
   encoders.getCountsAndResetLeft();               // Reset left encoder count
   encoders.getCountsAndResetRight();              // Reset right encoder count
-
-  //Serial.print(counts);
-
-  motors.setSpeeds(speed, speed);  // Set speed for both motors
-
   // Wait until the robot has traveled the desired distance
-  while ((encoders.getCountsLeft() + encoders.getCountsRight()) / 2 < counts) {}
+  while (encoders.getCountsLeft() < counts && encoders.getCountsRight() < counts) {
+    if (getTurnAngleInDegrees() >= 1 + currentAngle) {  //If gyroscope angle is more than one degree off, the bot will start reducing the speed on one wheel.
+      motors.setSpeeds(speed, speed - ((getTurnAngleInDegrees() - currentAngle) * 5)); // set speed to ajust for the angle 
+    }
+
+    if (getTurnAngleInDegrees() <= -1 + currentAngle) {  //If gyroscope angle is more than one degree off (in the other direction), the bot will start reducing the speed on the other wheel.
+      motors.setSpeeds(speed + ((getTurnAngleInDegrees() - currentAngle)  * 5), speed); // set speed to ajust for the angle 
+    }
+
+    if (buttonC.getSingleDebouncedRelease()) {  //This button will break the loop.
+      buttonC.waitForRelease();
+      delay(100);
+      break;
+    }
+  }
 
   motors.setSpeeds(0, 0);  // Stop the motors
-  delay(1000);
+  delay(100);
 }
 
 float calculateDistance(int16_t xArray[], int16_t yArray[], int from, int to) {
