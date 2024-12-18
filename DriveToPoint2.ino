@@ -44,10 +44,6 @@ void setup() {
     display.print("IMU Init Failed");
     while (1);  // stop the program if initialization fails
   }
-}
-
-void loop() {
-  // Nothing to do here
   generateCoordinates(xCoords, yCoords, numPoints, 1); 
   shortDistensen();
 
@@ -57,11 +53,9 @@ void loop() {
   moveToPositions();    // Start moving to positions
   turnToAngle(90 - currentAngle);
   display.print("done");
-  display.print("press A");
-  buttonA.waitForButton();
-  delay(5000);
 }
 
+void loop() {}
 
 // Function to generate random coordinates with a minimum distance constraint
 void generateCoordinates(int16_t xCoords[], int16_t yCoords[], int numPoints, float minDistance) {
